@@ -1,0 +1,10 @@
+/*
+
+!.gitignore
+!/README.md
+!/COPYING
+!/screenshot.png
+!/gradlew*
+!/?*.gradle
+!/src
+!/gradle
