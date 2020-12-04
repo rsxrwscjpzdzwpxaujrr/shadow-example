@@ -18,13 +18,14 @@
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 import static org.lwjgl.opengl.GL11.*;
 
 public class ShadowServer {
-    private final ArrayList<IShadowClient> shadowClients = new ArrayList<>();
-    private final ArrayList<ILight> lights = new ArrayList<>();
+    private final List<IShadowClient> shadowClients = new ArrayList<>();
+    private final List<ILight> lights = new ArrayList<>();
     private final Map<ILight, LightData> lightData;
 
     private int lightGradientTexture;
@@ -66,100 +67,118 @@ public class ShadowServer {
     }
 
     public void update() {
-        Map<ILight, Integer> verticesCount = new HashMap<>();
-
         for (ILight light: lights) {
             lightData.get(light).clear();
         }
 
+        List<IShadowClient> nearClients = new ArrayList<>();
+
         for (ILight light: lights) {
+            LightData data = lightData.get(light);
+
+            if (!data.enabled)
+                continue;
+
             float srcX = (float) light.getX();
             float srcY = (float) light.getY();
             float srcSize = (float) light.getMaxDistance();
-
-            float[] tempShadows = new float[buffSize];
-            float[] tempVertices = new float[buffSize];
-
-            float tempSrcSize;
-            int iter = 0;
-            
-            LightData data = lightData.get(light);
 
             for (IShadowClient client: shadowClients) {
                 if (!data.enabled)
                     break;
 
-                if (    Math.abs(client.getShadowClientX() - srcX) < srcSize + client.getSize() &&
-                        Math.abs(client.getShadowClientY() - srcY) < srcSize + client.getSize()) {
-                    float[] clvtx = client.getTriangles();
+                float clientSize = client.getSize();
+                float xDelta = Math.abs(client.getShadowClientX() - srcX);
+                float yDelta = Math.abs(client.getShadowClientY() - srcY);
 
-                    for (int i = 0; i < clvtx.length; i += 2) {
+                if (xDelta < srcSize + clientSize && yDelta < srcSize + clientSize) {
+                    if (xDelta < clientSize * 1.5f && yDelta < clientSize * 1.5f) {
+                        float[] clvtx = client.getTriangles();
+
                         // Проверка перекрывает ли треугольник источник света
-                        if ((clvtx.length - i) % 6 == 0) {
+                        for (int i = 0; i < clvtx.length; i += 6) {
                             float[] triangle = new float[6];
 
-                            for (int j = 0; j < 6; j++) {
-                                triangle[j] = clvtx[i + j];
-                            }
+                            System.arraycopy(clvtx, i, triangle, 0, 6);
 
                             if (checkIfPointInsideTriangle(triangle, srcX, srcY)) {
                                 data.enabled = false;
                                 break;
                             }
                         }
-
-                        tempSrcSize = srcSize * lightOversize;
-
-                        // Какая-то стрёмная математика, получаем проекцию теней на краях квадрата света
-                        if (  !(clvtx[i] - srcX <   clvtx[i + 1] - srcY   ||
-                                clvtx[i] - srcX > -(clvtx[i + 1] - srcY)) ||
-                               (clvtx[i] - srcX <   clvtx[i + 1] - srcY   &&
-                                clvtx[i] - srcX > -(clvtx[i + 1] - srcY))) {
-                            if (srcY < clvtx[i + 1])
-                                tempSrcSize = -tempSrcSize;
-
-                            tempShadows[iter] = -tempSrcSize / ((clvtx[i + 1] - srcY) / (clvtx[i] - srcX))  + srcX;
-                            tempShadows[iter + 1] = srcY - tempSrcSize;
-                        } else {
-                            if (srcX > clvtx[i])
-                                tempSrcSize = -tempSrcSize;
-
-                            tempShadows[iter] = srcX + tempSrcSize;
-                            tempShadows[iter + 1] = tempSrcSize / ((clvtx[i] - srcX) / (clvtx[i + 1] - srcY)) + srcY;
-                        }
-
-                        tempVertices[iter] = clvtx[i];
-                        tempVertices[iter + 1] = clvtx[i + 1];
-
-                        iter += 2;
-
-                        // Получаем из проекций теней на краях квадрата треугольники с тенями
-                        if (iter % 4 == 0) {
-                            int temp = iter - 4;
-
-                            data.shadows[data.shadowsLength]      = tempShadows[temp];
-                            data.shadows[data.shadowsLength + 1]  = tempShadows[temp + 1];
-
-                            data.shadows[data.shadowsLength + 2]  = tempShadows[temp + 2];
-                            data.shadows[data.shadowsLength + 3]  = tempShadows[temp + 3];
-
-                            data.shadows[data.shadowsLength + 4]  = tempVertices[temp];
-                            data.shadows[data.shadowsLength + 5]  = tempVertices[temp + 1];
-
-                            data.shadows[data.shadowsLength + 6]  = tempShadows[temp + 2];
-                            data.shadows[data.shadowsLength + 7]  = tempShadows[temp + 3];
-
-                            data.shadows[data.shadowsLength + 8]  = tempVertices[temp + 2];
-                            data.shadows[data.shadowsLength + 9]  = tempVertices[temp + 3];
-
-                            data.shadows[data.shadowsLength + 10] = tempVertices[temp];
-                            data.shadows[data.shadowsLength + 11] = tempVertices[temp + 1];
-
-                            data.shadowsLength += 12;
-                        }
                     }
 
-                    verticesCount.put(light, iter);
+                    if (data.enabled)
+                        nearClients.add(client);
+                }
+            }
+        }
+
+        for (ILight light: lights) {
+            LightData data = lightData.get(light);
+
+            if (!data.enabled)
+                continue;
+
+            float srcX = (float) light.getX();
+            float srcY = (float) light.getY();
+            float srcSize = (float) light.getMaxDistance();
+
+            for (IShadowClient client: nearClients) {
+                float[] clvtx = client.getTriangles();
+                float[] tempShadows = new float[4];
+                int iter = 0;
+
+                for (int i = 0; i < clvtx.length; i += 2) {
+                    float tempSrcSize = srcSize * lightOversize;
+
+                    // Какая-то стрёмная математика, получаем проекцию теней на краях квадрата света
+                    if (  !(clvtx[i] - srcX <   clvtx[i + 1] - srcY   ||
+                            clvtx[i] - srcX > -(clvtx[i + 1] - srcY)) ||
+                           (clvtx[i] - srcX <   clvtx[i + 1] - srcY   &&
+                            clvtx[i] - srcX > -(clvtx[i + 1] - srcY))) {
+                        if (srcY < clvtx[i + 1])
+                            tempSrcSize = -tempSrcSize;
+
+                        tempShadows[iter] = -tempSrcSize / ((clvtx[i + 1] - srcY) / (clvtx[i] - srcX))  + srcX;
+                        tempShadows[iter + 1] = srcY - tempSrcSize;
+                    } else {
+                        if (srcX > clvtx[i])
+                            tempSrcSize = -tempSrcSize;
+
+                        tempShadows[iter] = srcX + tempSrcSize;
+                        tempShadows[iter + 1] = tempSrcSize / ((clvtx[i] - srcX) / (clvtx[i + 1] - srcY)) + srcY;
+                    }
+
+                    iter += 2;
+
+                    // Получаем из проекций теней на краях квадрата треугольники с тенями
+                    if (i > 0 && iter % 4 == 0) {
+                        int temp = iter - 4;
+                        int tempi = (i + 2) - 4;
+
+                        data.shadows[data.shadowsLength]      = tempShadows[temp];
+                        data.shadows[data.shadowsLength + 1]  = tempShadows[temp + 1];
+
+                        data.shadows[data.shadowsLength + 2]  = tempShadows[temp + 2];
+                        data.shadows[data.shadowsLength + 3]  = tempShadows[temp + 3];
+
+                        data.shadows[data.shadowsLength + 4]  = clvtx[tempi];
+                        data.shadows[data.shadowsLength + 5]  = clvtx[tempi + 1];
+
+                        data.shadows[data.shadowsLength + 6]  = tempShadows[temp + 2];
+                        data.shadows[data.shadowsLength + 7]  = tempShadows[temp + 3];
+
+                        data.shadows[data.shadowsLength + 8]  = clvtx[tempi + 2];
+                        data.shadows[data.shadowsLength + 9]  = clvtx[tempi + 3];
+
+                        data.shadows[data.shadowsLength + 10] = clvtx[tempi];
+                        data.shadows[data.shadowsLength + 11] = clvtx[tempi + 1];
+
+                        data.shadowsLength += 12;
+
+                        iter = 0;
+                    }
                 }
             }
         }
