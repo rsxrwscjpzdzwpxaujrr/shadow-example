@@ -22,6 +22,7 @@ import java.util.List;
 import java.util.Map;
 
 import static org.lwjgl.opengl.GL11.*;
+import static org.lwjgl.opengl.GL20.*;
 
 public class ShadowServer {
     private final List<IShadowClient> shadowClients = new ArrayList<>();
@@ -29,8 +30,10 @@ public class ShadowServer {
     private final Map<ILight, LightData> lightData;
 
     private int lightGradientTexture;
-    private static final int buffSize = 1024 * 12;
+    private static final int buffSize = 8192 * 12;
     private final float lightOversize = 16.0f;
+    private final ShaderProgram program = new ShaderProgram();
+    private boolean shadersEnabled = true;
 
     private static class LightData {
         float[] shadows;
@@ -59,11 +62,17 @@ public class ShadowServer {
                     GL_LINEAR,
                     GL_LINEAR
             );
-        } catch (IOException exception) {
-            exception.printStackTrace();
+
+            program.loadShader(GL_VERTEX_SHADER, "light.vert");
+            program.loadShader(GL_FRAGMENT_SHADER, "light.frag");
+        } catch (IOException e) {
+            System.err.println("Can not find resources");
+            e.printStackTrace();
         }
 
         lightData = new HashMap<>();
+
+        glLinkProgram(program.id());
     }
 
     public void update() {
@@ -186,13 +195,16 @@ public class ShadowServer {
 
     public void draw() {
         glEnable(GL_STENCIL_TEST);
-        glBlendFunc(GL_DST_COLOR, GL_ONE);
+        glBlendFunc(GL_ONE, GL_ONE);
 
         for (ILight light: lights) {
             LightData data = lightData.get(light);
 
             if (!data.enabled)
                 continue;
+
+            float srcX = (float) light.getX();
+            float srcY = (float) light.getY();
 
             glClear(GL_STENCIL_BUFFER_BIT);
 
@@ -218,26 +230,35 @@ public class ShadowServer {
             Color color = light.getColor();
             glColor3f(color.r * color.a, color.g * color.a, color.b * color.a);
 
-            glEnable(GL_TEXTURE_2D);
-            glBindTexture(GL_TEXTURE_2D, lightGradientTexture);
+            if (shadersEnabled) {
+                glUseProgram(program.id());
+                glUniform2f(glGetUniformLocation(program.id(), "center"), srcX, srcY);
+            } else {
+                glUseProgram(0);
+                glEnable(GL_TEXTURE_2D);
+                glBindTexture(GL_TEXTURE_2D, lightGradientTexture);
+            }
 
             float halfOversize = (lightOversize - 1.0f) / 2.0f;
 
             glBegin(GL_QUADS);
-            glVertex2d(light.getX() - srcSize , light.getY() - srcSize);
+            glVertex2d(srcX - srcSize , srcY - srcSize);
             glTexCoord2f(-halfOversize, -halfOversize);
 
-            glVertex2d(light.getX() - srcSize, light.getY() + srcSize);
+            glVertex2d(srcX - srcSize, srcY + srcSize);
             glTexCoord2f(-halfOversize, halfOversize + 1.0f);
 
-            glVertex2d(light.getX() + srcSize, light.getY() + srcSize);
+            glVertex2d(srcX + srcSize, srcY + srcSize);
             glTexCoord2f(halfOversize + 1.0f, halfOversize + 1.0f);
 
-            glVertex2d(light.getX() + srcSize, light.getY() - srcSize);
+            glVertex2d(srcX + srcSize, srcY - srcSize);
             glTexCoord2f(halfOversize + 1.0f, -halfOversize);
             glEnd();
 
-            glDisable(GL_TEXTURE_2D);
+            if (shadersEnabled)
+                glUseProgram(0);
+            else
+                glDisable(GL_TEXTURE_2D);
         }
         glDisable(GL_STENCIL_TEST);
         glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
@@ -289,5 +310,13 @@ public class ShadowServer {
         double A3 = triangleArea(new float[] { x1, y1, x2, y2, x, y });
 
         return (A == A1 + A2 + A3);
+    }
+
+    public boolean shadersEnabled() {
+        return shadersEnabled;
+    }
+
+    public void setShadersEnabled(boolean shadersEnabled) {
+        this.shadersEnabled = shadersEnabled;
     }
 }

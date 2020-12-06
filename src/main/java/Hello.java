@@ -53,6 +53,8 @@ public class Hello {
         glfwDefaultWindowHints();
         glfwWindowHint(GLFW_VISIBLE, GLFW_FALSE);
         glfwWindowHint(GLFW_RESIZABLE, GLFW_FALSE);
+        glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 2);
+        glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 0);
 
         window = glfwCreateWindow(windowWidth, windowHeight, "Hello World!", NULL, NULL);
         if (window == NULL)
@@ -75,7 +77,7 @@ public class Hello {
                                     0.75f + (random.nextFloat() - 0.5f) / 2.0f,
                                     0.75f + (random.nextFloat() - 0.5f) / 2.0f,
                                     0.75f + (random.nextFloat() - 0.5f) / 2.0f,
-                                    random.nextFloat() / 3.0f
+                                    random.nextFloat() / 10.0f
                             );
 
                             shadowServer.addLight(new SimpleLight(cursorPos[0], cursorPos[1], 600.0, color));
@@ -102,6 +104,14 @@ public class Hello {
 
         shadowServer = new ShadowServer();
 
+        glfwSetKeyCallback(window, new GLFWKeyCallback() {
+            @Override
+            public void invoke(long window, int key, int scancode, int action, int mods) {
+                if (key == GLFW_KEY_S && action == GLFW_RELEASE)
+                    shadowServer.setShadersEnabled(!shadowServer.shadersEnabled());
+            }
+        });
+
         Box tempBox = new Box(100.0f, 100.0f, 50.0f);
         boxes.add(tempBox);
         shadowServer.addClient(tempBox);
@@ -110,13 +120,13 @@ public class Hello {
                 windowWidth / 2.0,
                 windowHeight - 100.0,
                 windowWidth,
-                new Color(1.0f, 1.0f, 1.0f, 0.5f)
+                new Color(1.0f, 1.0f, 1.0f, 0.1f)
         ));
 
         glEnable(GL_BLEND);
         glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 
-        glClearColor(0.25f, 0.25f, 0.25f, 0.0f);
+        glClearColor(0.15f, 0.15f, 0.15f, 0.0f);
         glOrtho(0, windowWidth, 0, windowHeight, -1, 1);
 
         while (!glfwWindowShouldClose(window)) {
