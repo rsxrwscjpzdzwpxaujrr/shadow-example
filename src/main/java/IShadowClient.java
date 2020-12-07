@@ -16,11 +16,11 @@
  */
 
 public interface IShadowClient {
-    float[] getTriangles();
-    float getShadowClientX();
-    float getShadowClientY();
+    float[] triangles();
+    float shadowClientX();
+    float shadowClientY();
 
-    default float getSize() {
+    default float size() {
         return 64.0f;
     }
 }

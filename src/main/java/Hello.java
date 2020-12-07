@@ -71,7 +71,7 @@ public class Hello {
 
                     switch (button) {
                         case GLFW_MOUSE_BUTTON_RIGHT:
-                            cursorPos = getCursorPos();
+                            cursorPos = cursorPos();
 
                             Color color = new Color(
                                     0.75f + (random.nextFloat() - 0.5f) / 2.0f,
@@ -80,11 +80,11 @@ public class Hello {
                                     random.nextFloat() / 10.0f
                             );
 
-                            shadowServer.addLight(new SimpleLight(cursorPos[0], cursorPos[1], 600.0, color));
+                            shadowServer.addLight(new SimpleLight(cursorPos[0], cursorPos[1], 600.0f, color));
                             break;
 
                         case GLFW_MOUSE_BUTTON_MIDDLE:
-                            cursorPos = getCursorPos();
+                            cursorPos = cursorPos();
 
                             Box box = new Box(cursorPos[0] - 50.0f / 2.0f, cursorPos[1] - 50.0f / 2.0f, 50.0f);
 
@@ -117,8 +117,8 @@ public class Hello {
         shadowServer.addClient(tempBox);
 
         shadowServer.addLight(new SimpleLight(
-                windowWidth / 2.0,
-                windowHeight - 100.0,
+                windowWidth / 2.0f,
+                windowHeight - 100.0f,
                 windowWidth,
                 new Color(1.0f, 1.0f, 1.0f, 0.1f)
         ));
@@ -133,10 +133,10 @@ public class Hello {
             glClear(GL_COLOR_BUFFER_BIT);
 
             if (glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_LEFT) == GLFW_PRESS) {
-                int[] cursorPos = getCursorPos();
+                int[] cursorPos = cursorPos();
 
-                tempBox.setX((float) cursorPos[0] - tempBox.getSize() / 2.0f);
-                tempBox.setY((float) cursorPos[1] - tempBox.getSize() / 2.0f);
+                tempBox.setX(cursorPos[0] - tempBox.size() / 2.0f);
+                tempBox.setY(cursorPos[1] - tempBox.size() / 2.0f);
             }
 
             shadowServer.update();
@@ -151,7 +151,7 @@ public class Hello {
         }
     }
 
-    private int[] getCursorPos() {
+    private int[] cursorPos() {
         double[] xpos = new double[1];
         double[] ypos = new double[1];
 

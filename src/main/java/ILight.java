@@ -16,8 +16,8 @@
  */
 
 public interface ILight {
-    double getX();
-    double getY();
-    double getMaxDistance();
-    Color getColor();
+    float x();
+    float y();
+    float maxDistance();
+    Color color();
 }

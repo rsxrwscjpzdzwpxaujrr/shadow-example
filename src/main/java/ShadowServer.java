@@ -88,21 +88,21 @@ public class ShadowServer {
             if (!data.enabled)
                 continue;
 
-            float srcX = (float) light.getX();
-            float srcY = (float) light.getY();
-            float srcSize = (float) light.getMaxDistance();
+            float srcX = light.x();
+            float srcY = light.y();
+            float srcSize = light.maxDistance();
 
             for (IShadowClient client: shadowClients) {
                 if (!data.enabled)
                     break;
 
-                float clientSize = client.getSize();
-                float xDelta = Math.abs(client.getShadowClientX() - srcX);
-                float yDelta = Math.abs(client.getShadowClientY() - srcY);
+                float clientSize = client.size();
+                float xDelta = Math.abs(client.shadowClientX() - srcX);
+                float yDelta = Math.abs(client.shadowClientY() - srcY);
 
                 if (xDelta < srcSize + clientSize && yDelta < srcSize + clientSize) {
                     if (xDelta < clientSize * 1.5f && yDelta < clientSize * 1.5f) {
-                        float[] clvtx = client.getTriangles();
+                        float[] clvtx = client.triangles();
 
                         // Проверка перекрывает ли треугольник источник света
                         for (int i = 0; i < clvtx.length; i += 6) {
@@ -129,12 +129,12 @@ public class ShadowServer {
             if (!data.enabled)
                 continue;
 
-            float srcX = (float) light.getX();
-            float srcY = (float) light.getY();
-            float srcSize = (float) light.getMaxDistance();
+            float srcX = light.x();
+            float srcY = light.y();
+            float srcSize = light.maxDistance();
 
             for (IShadowClient client: nearClients) {
-                float[] clvtx = client.getTriangles();
+                float[] clvtx = client.triangles();
                 float[] tempShadows = new float[4];
                 int iter = 0;
 
@@ -203,12 +203,11 @@ public class ShadowServer {
             if (!data.enabled)
                 continue;
 
-            float srcX = (float) light.getX();
-            float srcY = (float) light.getY();
+            float srcX = light.x();
+            float srcY = light.y();
+            float srcSize = light.maxDistance() * lightOversize;
 
             glClear(GL_STENCIL_BUFFER_BIT);
-
-            double srcSize = light.getMaxDistance() * lightOversize;
 
             glStencilFunc(GL_NEVER, 1, 0);
             glStencilOp(GL_REPLACE, GL_KEEP, GL_KEEP);
@@ -227,14 +226,13 @@ public class ShadowServer {
             glStencilOp(GL_KEEP, GL_KEEP, GL_KEEP);
 
             // Рисуем свет
-            Color color = light.getColor();
+            Color color = light.color();
             glColor3f(color.r * color.a, color.g * color.a, color.b * color.a);
 
             if (shadersEnabled) {
                 glUseProgram(program.id());
-                glUniform2f(glGetUniformLocation(program.id(), "center"), srcX, srcY);
+                glUniform2f(glGetUniformLocation(program.id(), "pos"), srcX, srcY);
             } else {
-                glUseProgram(0);
                 glEnable(GL_TEXTURE_2D);
                 glBindTexture(GL_TEXTURE_2D, lightGradientTexture);
             }
@@ -303,11 +301,11 @@ public class ShadowServer {
         float x3 = triangle[4];
         float y3 = triangle[5];
 
-        double A = triangleArea(triangle);
+        float A = triangleArea(triangle);
 
-        double A1 = triangleArea(new float[] { x, y, x2, y2, x3, y3 });
-        double A2 = triangleArea(new float[] { x1, y1, x, y, x3, y3 });
-        double A3 = triangleArea(new float[] { x1, y1, x2, y2, x, y });
+        float A1 = triangleArea(new float[] { x, y, x2, y2, x3, y3 });
+        float A2 = triangleArea(new float[] { x1, y1, x, y, x3, y3 });
+        float A3 = triangleArea(new float[] { x1, y1, x2, y2, x, y });
 
         return (A == A1 + A2 + A3);
     }
@@ -318,5 +316,8 @@ public class ShadowServer {
 
     public void setShadersEnabled(boolean shadersEnabled) {
         this.shadersEnabled = shadersEnabled;
+
+        if (!shadersEnabled)
+            glUseProgram(0);
     }
 }

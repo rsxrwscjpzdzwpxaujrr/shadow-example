@@ -1,8 +1,8 @@
 #version 110
 
-uniform vec2 center;
+uniform vec2 pos;
 
 void main() {
-    vec2 a = center - gl_FragCoord.xy;
+    vec2 a = pos - gl_FragCoord.xyz;
     gl_FragColor = gl_Color / (pow(dot(a, a), 0.4) / 32.0);
 }

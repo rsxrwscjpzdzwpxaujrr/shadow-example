@@ -29,7 +29,7 @@ public class Box implements IShadowClient {
     }
 
     @Override
-    public float[] getTriangles() {
+    public float[] triangles() {
         return new float[] {
             x, y,
             x, y + size,
@@ -41,17 +41,17 @@ public class Box implements IShadowClient {
     }
 
     @Override
-    public float getShadowClientX() {
-        return getX();
+    public float shadowClientX() {
+        return x();
     }
 
     @Override
-    public float getShadowClientY() {
-        return getY();
+    public float shadowClientY() {
+        return y();
     }
 
     public void draw() {
-        float[] vertices = getTriangles();
+        float[] vertices = triangles();
 
         if (vertices.length % 6 != 0)
             return;
@@ -67,7 +67,7 @@ public class Box implements IShadowClient {
         glEnd();
     }
 
-    public float getX() {
+    public float x() {
         return x;
     }
 
@@ -75,7 +75,7 @@ public class Box implements IShadowClient {
         this.x = x;
     }
 
-    public float getY() {
+    public float y() {
         return y;
     }
 
@@ -84,7 +84,7 @@ public class Box implements IShadowClient {
     }
 
     @Override
-    public float getSize() {
+    public float size() {
         return size;
     }
 

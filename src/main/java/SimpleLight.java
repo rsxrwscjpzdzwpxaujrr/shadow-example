@@ -16,12 +16,12 @@
  */
 
 public class SimpleLight implements ILight {
-    private double x;
-    private double y;
-    private double maxDistance;
+    private float x;
+    private float y;
+    private float maxDistance;
     private Color color;
 
-    public SimpleLight(double x, double y, double maxDistance, Color color) {
+    public SimpleLight(float x, float y, float maxDistance, Color color) {
         this.x = x;
         this.y = y;
         this.maxDistance = maxDistance;
@@ -29,22 +29,22 @@ public class SimpleLight implements ILight {
     }
 
     @Override
-    public double getX() {
+    public float x() {
         return x;
     }
 
     @Override
-    public double getY() {
+    public float y() {
         return y;
     }
 
     @Override
-    public double getMaxDistance() {
+    public float maxDistance() {
         return maxDistance;
     }
 
     @Override
-    public Color getColor() {
+    public Color color() {
         return color;
     }
 }
