@@ -30,18 +30,22 @@ public class ShadowServer {
     private final Map<ILight, LightData> lightData;
 
     private int lightGradientTexture;
-    private static final int buffSize = 8192 * 12;
     private final float lightOversize = 16.0f;
     private final ShaderProgram program = new ShaderProgram();
     private boolean shadersEnabled = true;
+
+    private static final int buffstep = 32;
+
+    private final int vbo;
 
     private static class LightData {
         float[] shadows;
         int shadowsLength;
         boolean enabled;
+        int buffsize = buffstep;
 
         private LightData() {
-            shadows = new float[buffSize];
+            setBuffsize(buffstep, null);
 
             clear();
         }
@@ -49,6 +53,22 @@ public class ShadowServer {
         private void clear() {
             shadowsLength = 0;
             enabled = true;
+        }
+
+        public void setBuffsize(int buffsize, ShadowServer server) {
+            this.buffsize = buffsize;
+
+            float[] oldShadows = shadows;
+
+            shadows = new float[buffsize];
+
+            if (oldShadows != null) {
+                System.arraycopy(oldShadows, 0, shadows, 0, shadowsLength);
+            }
+
+            if (server != null) {
+                server.updateVboSize();
+            }
         }
     }
 
@@ -73,6 +93,20 @@ public class ShadowServer {
         lightData = new HashMap<>();
 
         glLinkProgram(program.id());
+
+        vbo = glGenBuffers();
+        updateVboSize();
+    }
+
+    private void updateVboSize() {
+        long vertices = 0;
+
+        for (LightData data: lightData.values()) {
+            vertices += data.buffsize;
+        }
+
+        glBindBuffer(GL_ARRAY_BUFFER, vbo);
+        glBufferData(GL_ARRAY_BUFFER, vertices * Float.BYTES * 2, GL_DYNAMIC_DRAW);
     }
 
     public void update() {
@@ -133,23 +167,25 @@ public class ShadowServer {
             float srcY = light.y();
             float srcSize = light.maxDistance();
 
+            float[] tempShadows = new float[12];
+
             for (IShadowClient client: nearClients) {
                 float[] clvtx = client.triangles();
-                float[] tempShadows = new float[4];
+
                 int iter = 0;
 
                 for (int i = 0; i < clvtx.length; i += 2) {
                     float tempSrcSize = srcSize * lightOversize;
 
                     // Какая-то стрёмная математика, получаем проекцию теней на краях квадрата света
-                    if (  !(clvtx[i] - srcX <   clvtx[i + 1] - srcY   ||
+                    if (!(clvtx[i] - srcX < clvtx[i + 1] - srcY ||
                             clvtx[i] - srcX > -(clvtx[i + 1] - srcY)) ||
-                           (clvtx[i] - srcX <   clvtx[i + 1] - srcY   &&
-                            clvtx[i] - srcX > -(clvtx[i + 1] - srcY))) {
+                            (clvtx[i] - srcX < clvtx[i + 1] - srcY &&
+                                    clvtx[i] - srcX > -(clvtx[i + 1] - srcY))) {
                         if (srcY < clvtx[i + 1])
                             tempSrcSize = -tempSrcSize;
 
-                        tempShadows[iter] = -tempSrcSize / ((clvtx[i + 1] - srcY) / (clvtx[i] - srcX))  + srcX;
+                        tempShadows[iter] = -tempSrcSize / ((clvtx[i + 1] - srcY) / (clvtx[i] - srcX)) + srcX;
                         tempShadows[iter + 1] = srcY - tempSrcSize;
                     } else {
                         if (srcX > clvtx[i])
@@ -160,33 +196,50 @@ public class ShadowServer {
                     }
 
                     iter += 2;
+                }
 
-                    // Получаем из проекций теней на краях квадрата треугольники с тенями
-                    if (i > 0 && iter % 4 == 0) {
-                        int temp = iter - 4;
-                        int tempi = (i + 2) - 4;
+                // Получаем из проекций теней на краях квадрата треугольники с тенями
+                for (int i = 0; i < iter; i += 6) {
+                    for (int j = 0; j < 3; j++) {
+                        int a = i + (j == 2 ? 0 : ((j + 1) * 2));
+                        int b = i + (j * 2);
 
-                        data.shadows[data.shadowsLength]      = tempShadows[temp];
-                        data.shadows[data.shadowsLength + 1]  = tempShadows[temp + 1];
+                        boolean inverted;
 
-                        data.shadows[data.shadowsLength + 2]  = tempShadows[temp + 2];
-                        data.shadows[data.shadowsLength + 3]  = tempShadows[temp + 3];
+                        if (!(clvtx[i] - srcX < clvtx[i + 1] - srcY ||
+                                clvtx[i] - srcX > -(clvtx[i + 1] - srcY)) ||
+                                (clvtx[i] - srcX < clvtx[i + 1] - srcY &&
+                                        clvtx[i] - srcX > -(clvtx[i + 1] - srcY))) {
+                            inverted = srcY > clvtx[i + 1];
 
-                        data.shadows[data.shadowsLength + 4]  = clvtx[tempi];
-                        data.shadows[data.shadowsLength + 5]  = clvtx[tempi + 1];
+                            if (tempShadows[inverted ? a : b] > tempShadows[inverted ? b : a]) {
+                                continue;
+                            }
+                        } else {
+                            inverted = srcX > clvtx[i];
 
-                        data.shadows[data.shadowsLength + 6]  = tempShadows[temp + 2];
-                        data.shadows[data.shadowsLength + 7]  = tempShadows[temp + 3];
+                            if (tempShadows[(inverted ? b : a) + 1] > tempShadows[(inverted ? a : b) + 1]) {
+                                continue;
+                            }
+                        }
 
-                        data.shadows[data.shadowsLength + 8]  = clvtx[tempi + 2];
-                        data.shadows[data.shadowsLength + 9]  = clvtx[tempi + 3];
+                        if (data.shadowsLength + 8 > data.buffsize) {
+                            data.setBuffsize(data.buffsize + 256, this);
+                        }
 
-                        data.shadows[data.shadowsLength + 10] = clvtx[tempi];
-                        data.shadows[data.shadowsLength + 11] = clvtx[tempi + 1];
+                        data.shadows[data.shadowsLength] = tempShadows[a];
+                        data.shadows[data.shadowsLength + 1] = tempShadows[a + 1];
 
-                        data.shadowsLength += 12;
+                        data.shadows[data.shadowsLength + 2] = tempShadows[b];
+                        data.shadows[data.shadowsLength + 3] = tempShadows[b + 1];
 
-                        iter = 0;
+                        data.shadows[data.shadowsLength + 4] = clvtx[b];
+                        data.shadows[data.shadowsLength + 5] = clvtx[b + 1];
+
+                        data.shadows[data.shadowsLength + 6] = clvtx[a];
+                        data.shadows[data.shadowsLength + 7] = clvtx[a + 1];
+
+                        data.shadowsLength += 8;
                     }
                 }
             }
@@ -197,67 +250,92 @@ public class ShadowServer {
         glEnable(GL_STENCIL_TEST);
         glBlendFunc(GL_ONE, GL_ONE);
 
+        glBindBuffer(GL_ARRAY_BUFFER, vbo);
+        glVertexPointer(2, GL_FLOAT, 0, 0);
+        glEnableClientState(GL_VERTEX_ARRAY);
+
+        List<ILight> enabledLights = new ArrayList<>();
+
         for (ILight light: lights) {
-            LightData data = lightData.get(light);
+            if (lightData.get(light).enabled) {
+                enabledLights.add(light);
+            }
+        }
 
-            if (!data.enabled)
-                continue;
+        int first = 0;
 
-            float srcX = light.x();
-            float srcY = light.y();
-            float srcSize = light.maxDistance() * lightOversize;
-
+        for (int j = 0; j < enabledLights.size(); j += 8) {
             glClear(GL_STENCIL_BUFFER_BIT);
 
-            glStencilFunc(GL_NEVER, 1, 0);
-            glStencilOp(GL_REPLACE, GL_KEEP, GL_KEEP);
-
             // Рисуем тени в буфер трафарета
-            glColor3f(1.0f, 1.0f, 1.0f);
 
-            glBegin(GL_TRIANGLES);
+            glStencilOp(GL_REPLACE, GL_KEEP, GL_KEEP);
+            glStencilFunc(GL_NEVER, 0xFF, 0xFF);
 
-            for (int i = 0; i < data.shadowsLength; i += 2)
-                glVertex2f(data.shadows[i], data.shadows[i + 1]);
+            for (int i = j; i < enabledLights.size() && i - j < 8; i++) {
+                LightData data = lightData.get(enabledLights.get(i));
 
-            glEnd();
+                glStencilMask(1 << (i - j));
 
-            glStencilFunc(GL_NOTEQUAL, 1, 1);
-            glStencilOp(GL_KEEP, GL_KEEP, GL_KEEP);
+                glBufferSubData(GL_ARRAY_BUFFER, (long) first * 2 * Float.BYTES, data.shadows);
+                glDrawArrays(GL_QUADS, first, data.shadowsLength / 2);
 
-            // Рисуем свет
-            Color color = light.color();
-            glColor3f(color.r * color.a, color.g * color.a, color.b * color.a);
+                first += data.buffsize;
+            }
 
             if (shadersEnabled) {
                 glUseProgram(program.id());
-                glUniform2f(glGetUniformLocation(program.id(), "pos"), srcX, srcY);
             } else {
                 glEnable(GL_TEXTURE_2D);
                 glBindTexture(GL_TEXTURE_2D, lightGradientTexture);
             }
 
-            float halfOversize = (lightOversize - 1.0f) / 2.0f;
+            glStencilOp(GL_KEEP, GL_KEEP, GL_KEEP);
+            glStencilMask(0xFF);
 
-            glBegin(GL_QUADS);
-            glVertex2d(srcX - srcSize , srcY - srcSize);
-            glTexCoord2f(-halfOversize, -halfOversize);
+            for (int i = j; i < enabledLights.size() && i - j < 8; i++) {
+                ILight light = enabledLights.get(i);
 
-            glVertex2d(srcX - srcSize, srcY + srcSize);
-            glTexCoord2f(-halfOversize, halfOversize + 1.0f);
+                float srcX = light.x();
+                float srcY = light.y();
+                float srcSize = light.maxDistance() * lightOversize;
 
-            glVertex2d(srcX + srcSize, srcY + srcSize);
-            glTexCoord2f(halfOversize + 1.0f, halfOversize + 1.0f);
+                glStencilFunc(GL_EQUAL, 0, 1 << (i - j));
 
-            glVertex2d(srcX + srcSize, srcY - srcSize);
-            glTexCoord2f(halfOversize + 1.0f, -halfOversize);
-            glEnd();
+                if (shadersEnabled) {
+                    glUniform2f(glGetUniformLocation(program.id(), "pos"), srcX, srcY);
+                }
 
-            if (shadersEnabled)
+                // Рисуем свет
+                Color color = light.color();
+                glColor3f(color.r * color.a, color.g * color.a, color.b * color.a);
+
+                float halfOversize = (lightOversize - 1.0f) / 2.0f;
+
+                glBegin(GL_QUADS);
+
+                glVertex2d(srcX + srcSize, srcY - srcSize);
+                glTexCoord2f(halfOversize + 1.0f, -halfOversize);
+
+                glVertex2d(srcX + srcSize, srcY + srcSize);
+                glTexCoord2f(halfOversize + 1.0f, halfOversize + 1.0f);
+
+                glVertex2d(srcX - srcSize, srcY + srcSize);
+                glTexCoord2f(-halfOversize, halfOversize + 1.0f);
+
+                glVertex2d(srcX - srcSize , srcY - srcSize);
+                glTexCoord2f(-halfOversize, -halfOversize);
+
+                glEnd();
+            }
+
+            if (shadersEnabled) {
                 glUseProgram(0);
-            else
+            } else {
                 glDisable(GL_TEXTURE_2D);
+            }
         }
+
         glDisable(GL_STENCIL_TEST);
         glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
     }
@@ -274,6 +352,8 @@ public class ShadowServer {
         lights.add(light);
 
         lightData.put(light, new LightData());
+
+        updateVboSize();
     }
 
     public void removeLight(ILight light) {

@@ -31,12 +31,12 @@ public class Box implements IShadowClient {
     @Override
     public float[] triangles() {
         return new float[] {
-            x, y,
+            x + size, y + size,
             x, y + size,
-            x + size, y + size,
             x, y,
             x + size, y + size,
-            x + size, y
+            x, y,
+            x + size, y,
         };
     }
 
