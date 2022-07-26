@@ -307,7 +307,7 @@ public class ShadowServer {
         float A2 = triangleArea(new float[] { x1, y1, x, y, x3, y3 });
         float A3 = triangleArea(new float[] { x1, y1, x2, y2, x, y });
 
-        return (A == A1 + A2 + A3);
+        return (Math.abs(A - (A1 + A2 + A3)) < 0.0125f);
     }
 
     public boolean shadersEnabled() {
