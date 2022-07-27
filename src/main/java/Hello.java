@@ -126,6 +126,8 @@ public class Hello {
         glEnable(GL_BLEND);
         glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 
+        glEnable(GL_CULL_FACE);
+
         glClearColor(0.15f, 0.15f, 0.15f, 0.0f);
         glOrtho(0, windowWidth, 0, windowHeight, -1, 1);
 
